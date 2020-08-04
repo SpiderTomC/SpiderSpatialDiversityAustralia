@@ -1,9 +1,10 @@
-EastSpiders = read.csv( #filepath of Spider Records East coast# , stringasfactors=F)
+EastSpiders = read.csv( #filepath of Spider Records East coast# , stringAsFactors=F)
+EastSpiders = read.csv( "c:\\Users\\Thoma\\Documents\\PhD Chapter one\\records-2019-06-20.csv", stringsAsFactors=F)  
 #latitudinal and longitudinal bounds
-min(EastSpiders$decimalLatitude)
-max(EastSpiders$decimalLatitude)
-min(EastSpiders$decimalLongitude)
-max(EastSpiders$decimalLongitude)
+min(EastSpiders$Latitude, na.rm=T)
+max(EastSpiders$Latitude, na.rm=T)
+min(EastSpiders$Longitude,na.rm=T)
+max(EastSpiders$Longitude,na.rm=T)
 
 #chao1 function#
 Chao1<-function(n)        {
@@ -11,74 +12,116 @@ Chao1<-function(n)        {
   return(length(n) + length(which(n == 1)) * (length(which(n == 1)) - 1) / (2 *  (length(which(n == 2)) + 1)))
   
 }
-#squares function for diversity estimation
-squares<-function(n)	{
-  S <- length(n)
-  N <- sum(n)
-  s1 <- length(which(n == 1))
-  if (s1 == S)
-    return(NA)
-  return(S + s1^2 * sum(n^2) / (N^2 - S * s1))
-}
 
+
+simpson<-function(n)	{
+  N <- sum(n)
+  if(N== length(n))
+    return(NA)
+  f <- n / N
+  S <- N / (N - 1) * (1 - sum(f^2))
+  return(1 / (1 - S))
+}
+#Fisher's alpha function
+
+logSeriesParams<-function(ab)   {
+  a = 10
+  olda = 0
+  n = sum(ab)
+  z = 0
+  while (abs(a - olda) > 0.0000001 && z < 1000)  {
+    z = z + 1
+    olda = a
+    a = length(ab) / log(1 + n / a)
+  }
+  x = n/(n + a)
+  return(c(a,x))
+}
 #creation of cell latitude and longitude sequences, using the maximum and  minimum determined previously#
 cellLats= seq(-12,-39,by=-0.25)
 cellLongs= seq(138, 159.5,by= 0.25)
 
-#creation of cell band arrays. Quarter degree cells balance accuracy with sample size. Both Chao1 and Squares#
-#are run within the loop, giving observed richness and two estimates#
+#creation of cell band arrays. Quarter degree cells balance accuracy with sample size. Chao1, 1/D and Fisher's alpha#
+#are run within the loop, giving observed richness and three estimates#
 
 Longrichness <- array()
 Longcounts <- array()
 Cellrichness<-array()
 Cellcounts<- array()
-cellsquare<- array()
-squarecell<-array()
+eastabund<- matrix(nrow=length(unique(EastSpiders$Species)),ncol = 9483,dimnames = list(c(unique(EastSpiders$Species))))
+eastabund[is.na=T]<-0
+eastspecieslist=c(unique(EastSpiders$Species))
+simpcell<-array()
 squareslat<-array()
 squareslong<-array()
 chaocell<-array()
+isrcell<- array()
+fishercell<-array()
 latcount=1
 longcount=1
 for (i in cellLongs)
-{ eastspidlong<- EastSpiders[which(EastSpiders$decimalLongitude<=i & EastSpiders$decimalLongitude >i-.25),]
-Longrichness[longcount]<- length(unique(eastspidlong$specificEpithet))
+{ eastspidlong<- EastSpiders[which(EastSpiders$Longitude<=i & EastSpiders$Longitude >i-.25),]
+Longrichness[longcount]<- length(unique(eastspidlong$Species))
 Longcounts[longcount]<- nrow(eastspidlong)
 for (m in cellLats)
-{eastcell<- eastspidlong[which(eastspidlong$decimalLatitude<=m & eastspidlong$decimalLatitude>m-.25),]
-eastcell<- eastcell[which(eastcell$specificEpithet!=""),]
-eastcelltable<- sort(table(droplevels(eastcell$specificEpithet,decreasing = T)))
-eastcelltable<-eastcelltable[2:length(eastcelltable)]
-Cellrichness[latcount]<-length(unique(eastcell$specificEpithet))
+{eastcell<- eastspidlong[which(eastspidlong$Latitude<=m & eastspidlong$Latitude>m-.25),]
+eastcell<- eastcell[which(eastcell$Species!=""),]
+eastcelltable<- sort(table(eastcell$Species),decreasing = T)
+if (nrow(eastcell)>0){
+for (j in 1:length(eastspecieslist)){
+  eastabund[j,latcount]<-nrow(eastcell[which(eastcell$Species==eastspecieslist[j]),])
+}
+}
+Cellrichness[latcount]<-length(unique(eastcell$Species))
 Cellcounts[latcount]<- nrow(eastcell)
-squarecell[latcount] <- squares(eastcelltable)
-chaocell[latcount] <- Chao1(eastcelltable)
+simpcell[latcount] <- simpson(eastcelltable)
+if (length(eastcelltable>0)){
+  falpha<-logSeriesParams(eastcelltable)
+  fishercell[latcount]<-falpha[1]
+}
+else {
+fishercell[latcount]<-NA
+}
+chao1cell[latcount] <- Chao1(eastcelltable)
 squareslat[latcount]=m
 squareslong[latcount]=i
 
 latcount<-latcount+1
-
 }
 longcount<-longcount+1
 }
-
+eastcelltable<-eastcelltable[2:length(eastcelltable)]
 #creation of richness matrices, flipping column and then transposing is necessary for correct orientation#
 #of the contour map#
 #raw richness#
-spidercell1=matrix(Cellrichness,nrow=length(cellLongs),ncol=length(cellLats))
+spidercell1=matrix(Cellrichness,nrow=length(cellLats),ncol=length(cellLongs))
 spidercell1[spidercell1==0]<-NA
-spidercell1<-spidercell1[,ncol(spidercell1)[1]:1]
 spidercell1=t(spidercell1)
+spidercell1<-spidercell1[,ncol(spidercell1)[1]:1]
 #chao1 richness#
+chao1cell[simpcell==NA]<-NA
+chao1cell[chao1cell==1]<-NA
+chao1cell[chao1cell==0]<-NA
 chao1cells= matrix(chao1cell,nrow=length(cellLats),ncol=length(cellLongs))
-chao1cells[is.na(chao1cells)]<-0
-chao1cells<-chao1cells[,ncol(chao1cells)[1]:1]
 chao1cells=t(chao1cells)
-#squares richness#
-squaresmat= matrix(squarecell,nrow=length(cellLats),ncol=length(cellLongs))
-squaresmat[squaresmat==0]<-NA
-squaresmat=squaresmat[nrow(squaresmat)[1]:1,]
-squaresmat=t(squaresmat)
-
+chao1cells<-chao1cells[,ncol(chao1cells)[1]:1]
+#simpsons d#
+simpmat= matrix(simpcell,nrow=length(cellLats),ncol=length(cellLongs))
+simpmat=simpmat[nrow(simpmat)[1]:1,]
+simpmat=t(simpmat)
+#isr rarefy#
+isrmat= matrix(isrcell,nrow=length(cellLats),ncol=length(cellLongs))
+isrmat=isrmat[nrow(isrmat)[1]:1,]
+isrmat=t(isrmat)
+#fisher#
+fishercell[fishercell>500]<- NA
+fishermat= matrix(fishercell, nrow=length(cellLats),ncol=length(cellLongs))
+fishermat=fishermat[nrow(fishermat)[1]:1,]
+fishermat=t(fishermat)
+plot(Cellrichness[which(is.na(isrcell)!=T)],chao1cell[which(is.na(isrcell)!=T)],log="xy",xlab="Raw Richness", ylab="Estimated Richness", pch=16, cex=0.8)
+points(Cellrichness[which(is.na(isrcell)!=T)],simpcell[which(is.na(isrcell)!=T)], cex=0.8, pch=16, col="red")
+points(Cellrichness[which(is.na(isrcell)!=T)],isrcell[which(is.na(isrcell)!=T)], cex=0.8, pch=16, col="blue")
+lines(c(1:350),c(1:350),lwd=2)
 #Worldclim data extraction and assembly#
 #requires sp and raster package#
 library(raster)
@@ -121,28 +164,132 @@ tempseasonality= tempseasonality/100
 dryquartermat= matrix(dryquartervalues,nrow=length(cellLats),ncol=length(cellLongs))
 dryquartermat=dryquartermat[nrow(dryquartermat)[1]:1,]
 dryquartermat=t(dryquartermat)
+#latitude vs diversity
+rawlatline= (lm(log(Cellrichness[Cellcounts>99])~squareslat[Cellcounts>99]))$coef
+chaolatline= (lm(chao1cell[Cellcounts>99]~squareslat[Cellcounts>99]))$coef
+simplatline= (lm(simpcell[Cellcounts>99]~squareslat[Cellcounts>99]))$coef
+fisherlatline= (lm(fishercell[Cellcounts>99]~squareslat[Cellcounts>99]))$coef
+#population density code
+library(sf)
+poplat=squareslat-0.125
+poplong=squareslong+0.125
+popgrid=cbind(poplong,poplat)
+popgrid<- popgrid[order(popgrid[,2]),]
+popdensity = t(read.table('c:\\Users\\Thoma\\Documents\\PhD Chapter one\\gpw_v4_population_density_2020_15_min.asc',sep='' ,na.strings='-9999'))
+areas = read_sf("c:\\Users\\Thoma\\Documents\\PhD Chapter one\\ne_50m_urban_areas.shp")
+coarse = st_make_grid(areas,offset=c(-180,-90),cellsize=c(0.25,0.25),n=c(360*4,180*4),what = "centers")
+popcoords = st_coordinates(coarse)
+popcoords2= popcoords[popcoords[,1]>100 & popcoords[,1]<162 & popcoords[,2]>=-50 & popcoords[,2]<=-10,]
+popcoords3= popcoords[popcoords[,1]>=138 & popcoords[,1]<=159.625 & popcoords[,2]>=-39.125 & popcoords[,2]<=-12]
+cellDensity = array(dim=nrow(popcoords),data=NA)
+for (i in 1:nrow(popcoords))       {
+  rounded_long = round((popcoords[i,1] + 180 + 0.25)*4)
+  rounded_lat = ncol(popdensity) - round((popcoords[i,2] + 90 + 0.25)*4)
+  
+  if (rounded_lat > 0 && ncol(popdensity) - rounded_lat > 0)
+    cellDensity[i] = popdensity[rounded_long,rounded_lat]
 
-#Exploratory factor analysis#
-squarefact= cbind(log(squarecell),climvalues,altvalues,dryvalues,dryquartervalues,tempseasonvalues,squareslat,Cellcounts)
-squarefact= squarefact[which(squarefact[,9]>49),]
-squarefact= na.omit(squarefact)
+}
+ausdensity<- cellDensity[popcoords[,1]>=138.125 & popcoords[,1]<=159.625 & popcoords[,2]>=-39.125 & popcoords[,2]<=-12.125]
+ausgrid=cbind(popgrid,ausdensity)
+ausgrid=ausgrid[order(ausgrid[,1],-ausgrid[,2]),]
+#Exploratory factor analysis and linear regression#
+restrictedabund=eastabund[,which(Cellcounts>49)]
+restrictedabund<-restrictedabund[2:2323,]
+restrictedabund <- restrictedabund[ order(row.names(restrictedabund)), ]
+envfact = cbind(log(Cellrichness), log(chao1cell),log(simpcell),log(fishercell),climvalues,altvalues,dryvalues,dryquartervalues,tempseasonvalues,squareslat, log(ausgrid[,3]), Cellcounts)
+envfact= envfact[which(envfact[,13]>49),]
+envfact[,6]<- sqrt(envfact[,6])
+envfact[envfact[,12]==-Inf]<-NA
+envfact= na.omit(envfact)
+rawregr= cbind(log(Cellrichness),climvalues,altvalues,dryvalues,dryquartervalues,tempseasonvalues,squareslat, log(ausgrid[,3]), Cellcounts)
+rawregr[rawregr[,9]==-Inf]<-NA
+rawregr=rawregr[which(rawregr[,10]>49),]
+rawregr=na.omit(rawregr)
+simpfact= cbind(log(simpcell),climvalues,altvalues,dryvalues,dryquartervalues,tempseasonvalues,squareslat,log(ausgrid[,3]),Cellcounts)
+simpfact= simpfact[which(simpfact[,10]>49),]
+simpfact[,3]<- sqrt(simpfact[,3])
+simpfact[simpfact[,9]==-Inf]<-NA
+simpfact= na.omit(simpfact)
+
+
 library(psych)
-fa(scale(squarefact[,1:8]),nfactors=8)
-fa(scale(squarefact[,1:8]),nfactors=5, rotate= 'varimax')
-fa(scale(squarefact[,1:8]),nfactors=8,fm="wls",rotate= 'varimax')
+fa(scale(simpfact[,2:9]),nfactors=3, rotate= 'varimax', fm="wls")
+simpscores= fa(scale(simpfact[,2:9]),nfactors=3, rotate= 'varimax', fm="wls")$scores
+chaoscores= fa(scale(chaofact[,2:9]),nfactors=3, rotate= 'varimax', fm="wls")$scores
+envscores= fa(scale(envfact[,5:12]),nfactors=3, rotate= 'varimax', fm="minres")$scores
+envscores= factanal(scale(envfact[,5:12]),factors=3, scores = 'regression')$scores
+summary(lm(envfact[,1]~envscores[,1:3]))
+summary(lm(envfact[,2]~envscores[,1:3]))
+summary(lm(envfact[,3]~envscores[,1:3]))
+summary(lm(envfact[,4]~envscores[,1:3]))
+summary(lm(envfact[,2]~envscores[,1:3]+envfact[,13]))
+summary(lm(envfact[,3]~envscores[,1:3]+envfact[,13]))
+summary(lm(envfact[,4]~envscores[,1:3]+envfact[,13]))
+summary(lm(envfact[,1]~envfact[,5]))
+#linear models of environment vs richness one by one#
+#observed richness
+rawcoeff<- matrix(nrow=8, ncol = 5)
+for (i in 5:12){
+  model<-summary(lm(envfact[,1]~envfact[,i]))
+  rawcoeff[i-4,1]<-model$adj.r.squared
+  rawcoeff[i-4,2]<-model$sigma
+  rawcoeff[i-4,3]<-model$coefficients[2,1]
+  rawcoeff[i-4,4]<-model$coefficients[2,3]
+  rawcoeff[i-4,5]<-model$coefficients[2,4]
+}
+#chao 1
+chaocoeff<- matrix(nrow=8, ncol = 5)
+for (i in 5:12){
+  model<-summary(lm(envfact[,2]~envfact[,i]))
+  chaocoeff[i-4,1]<-model$adj.r.squared
+  chaocoeff[i-4,2]<-model$sigma
+  chaocoeff[i-4,3]<-model$coefficients[2,1]
+  chaocoeff[i-4,4]<-model$coefficients[2,3]
+  chaocoeff[i-4,5]<-model$coefficients[2,4]
+}
+#inverse simpson's index#
+simpcoeff<- matrix(nrow=8, ncol = 5)
+for (i in 5:12){
+  model<-summary(lm(envfact[,3]~envfact[,i]))
+  simpcoeff[i-4,1]<-model$adj.r.squared
+  simpcoeff[i-4,2]<-model$sigma
+  simpcoeff[i-4,3]<-model$coefficients[2,1]
+  simpcoeff[i-4,4]<-model$coefficients[2,3]
+  simpcoeff[i-4,5]<-model$coefficients[2,4]
+}
+#fisher's alpha#
+fishcoeff<- matrix(nrow=8, ncol = 5)
+for (i in 5:12){
+  model<-summary(lm(envfact[,4]~envfact[,i]))
+  fishcoeff[i-4,1]<-model$adj.r.squared
+  fishcoeff[i-4,2]<-model$sigma
+  fishcoeff[i-4,3]<-model$coefficients[2,1]
+  fishcoeff[i-4,4]<-model$coefficients[2,3]
+  fishcoeff[i-4,5]<-model$coefficients[2,4]
+}
 
 #creation of contour plots#
+library(car)
 png('Fig 01 Richness.png', width=550, height=700)
 par(mar=c(5.5,6,2,2), mgp=c(2.5,0.75,0), cex=1.3, cex.lab=1.25, las=1)
-filled.contour(x=seq(138,160,length.out = nrow(spidercell1)),y=seq(-39,-12,length.out = ncol(spidercell1)),spidercell1,col = spectral,levels = c(0,10,40,70,100,130,160,190,220,250,280),key.axes=axis(4,c(0,10,40,70,100,130,160,190,220,250,280)))
+filled.contour(x=seq(138,160,length.out = nrow(spidercell1)),y=seq(-39,-12,length.out = ncol(spidercell1)),spidercell1,col = spectral,levels = c(0,10,40,70,100,130,160,190,220,250,290),key.axes=axis(4,c(0,10,40,70,100,130,160,190,220,250,290)))
 dev.off()
 png('Fig 01B Chao1 Richness.png', width=550, height=700)
 par(mar=c(5.5,6,2,2), mgp=c(2.5,0.75,0), cex=1.3, cex.lab=1.25, las=1)
-filled.contour(x=seq(138,160,length.out = nrow(chao1cells)),y=seq(-39,-12,length.out = ncol(chao1cells)),chao1cells,col = spectral,levels = c(0,10,40,70,100,130,160,190,220,250,280),key.axes=axis(4,c(0,10,40,70,100,130,160,190,220,250,280)))
+filled.contour(x=seq(138,160,length.out = nrow(chao1cells)),y=seq(-39,-12,length.out = ncol(chao1cells)),chao1cells,col = spectral,levels = c(0,10,30,70,120,170,220,270,320,370,420),key.axes=axis(4,c(0,10,30,70,120,170,220,270,320,370,420)))
 dev.off()
-png('Fig 01C Squares Richness.png', width=550, height=700)
+png('Fig 01C Simpsons D.png', width=550, height=700)
 par(mar=c(5.5,6,2,2), mgp=c(2.5,0.75,0), cex=1.3, cex.lab=1.25, las=1)
-filled.contour(x=seq(138,160,length.out = nrow(squaresmat)),y=seq(-39,-12,length.out = ncol(squaresmat)),squaresmat,col = spectral,levels = c(0,10,40,70,100,130,160,190,220,250,280),key.axes=axis(4,c(0,10,40,70,100,130,160,190,220,250,280)))
+filled.contour(x=seq(138,160,length.out = nrow(simpmat)),y=seq(-39,-12,length.out = ncol(simpmat)),simpmat,col = spectral,levels = c(0,5,10,20,40,60,80,100,120,140,160),key.axes=axis(4,c(0,5,10,20,40,60,80,100,120,140,160)))
+dev.off()
+png('Fig 01D ISR Rarefy.png', width=550, height=700)
+par(mar=c(5.5,6,2,2), mgp=c(2.5,0.75,0), cex=1.3, cex.lab=1.25, las=1)
+filled.contour(x=seq(138,160,length.out = nrow(isrmat)),y=seq(-39,-12,length.out = ncol(isrmat)),isrmat,col = spectral,levels = c(0,10,20,40,80,120,160,200,240,280,320),key.axes=axis(4,c(0,10,20,40,80,120,160,200,240,280,320)))
+dev.off()
+png('Fig 01E Fisher.png', width=550, height=700)
+par(mar=c(5.5,6,2,2), mgp=c(2.5,0.75,0), cex=1.3, cex.lab=1.25, las=1)
+filled.contour(x=seq(138,160,length.out = nrow(fishermat)),y=seq(-39,-12,length.out = ncol(fishermat)),fishermat,col = spectral,levels = c(0,10,20,30,45,60,75,90,105,120,135),key.axes=axis(4,c(0,10,20,30,45,60,75,90,105,120,135)))
 dev.off()
 #environmental
 png('Fig S1 Temp.png', width=550, height=750)
@@ -171,41 +318,68 @@ filled.contour(x=seq(138,160,length.out = nrow(tempseasonality)),y=seq(-39,-12,l
 dev.off()
 
 #richness curves and latitudinal lines
-png('Fig 02 Richness curves.png', width=1000, height=1200)
-par( mgp=c(3,0.75,0), cex=1.3, cex.lab=1.5, cex.axis=1.2,las=1, mfcol=c(3,2), oma=c(0,2,0,0),mar=c(4.5,6,0.5,1))
-plot(Cellcounts,Cellrichness,log='xy',pch=19,xlab='',ylab="Species richness",xaxt='n',yaxt='n',mar=c(0,6,0,2))
-axis(2,at=c(1,5,20,50,100,200),labels=c(1,5,20,50,100,200))
-text(2,150,labels='a',cex=2)
-plot(Cellcounts,chaocell,log='xy',pch=19,xlab="",ylab="Chao1 species richness",xaxt='n',yaxt='n',col="blue",mar=c(0,6,.5,2))
-axis(2,at=c(1,5,20,50,100,200),labels=c(1,5,20,50,100,200))
-text(2,200,labels='b',cex=2)
-plot(Cellcounts,squarecell,log='xy',pch=19,xlab="Data records per cell",ylab="Squares species richness",xaxt='n',yaxt='n',col="red",mar=c(5.5,6,.5,2))
-axis(1,at=c(1,5,20,100,250,500,1000,2500),labels=c(1,5,20,100,250,500,1000,2500))
-axis(2,at=c(1,5,20,100,200,500),labels=c(1,5,20,100,200,500))
-text(2,400,labels='c',cex=2)
-plot(Latitude,Cellrichness[Cellcounts>99],log='y',pch=19,xlab="",xaxt='n',ylab="Species richness",yaxt='n',xlim=c(-12,-39),mar=c(0,6,0,2))
-axis(2,at=c(25,40,50,100,200),labels=c(25,40,50,100,200))
-text(-14,200,labels='d',cex=2)
-abline(coef=c(99.5,1.409),lwd=2,untf=T)
-plot(Latitude,chaocell[Cellcounts>99],log='y',pch=19,xlab="",xaxt='n',ylab="Chao1 species richness",yaxt='n',col="blue",xlim=c(-12,-39),mar=c(0,6,0,2))
-axis(2,at=c(25,40,50,100,200,300),labels=c(25,40,50,100,200,300))
-text(-14,275,labels='e',cex=2)
-abline(coef=c(141.517,1.257),untf=T,lwd=2,col="blue")
-plot(Latitude,squarecell[Cellcounts>99],log='y',pch=19,xlab="Latitude",ylab="Squares species richness",yaxt='n',col="red",xlim=c(-12,-39),mar=c(5.5,6,.5,2))
-axis(2,at=c(25,50,100,250,500,1000),labels=c(25,50,100,250,500,1000))
-text(-14,500,labels='f',cex=2)
-abline(coef=c(132.373,1.022),untf=T,lwd=2,col="red")
+png('Fig 02 Richness curves.png', width=1000, height=1000)
+par( mgp=c(3,0.75,0), cex=1.3, cex.lab=2.5, cex.axis=1.8,las=1, mfcol=c(2,2), oma=c(0,2,0,0),mar=c(4.5,6,0.5,1))
+plot(Cellcounts,Cellrichness,log='xy',pch=19,xlab='',ylab="Observed species richness",xaxt='n',yaxt='n',mar=c(0,6,0,2),cex.lab=2)
+axis(2,at=c(1,5,20,50,100,200),labels=c(1,5,20,50,100,200),cex= 2.2)
+text(2,150,labels='a',cex=4)
+plot(Cellcounts,chao1cell,log='xy',pch=19,xlab="Data records per cell",ylab="Chao1 species richness",xaxt='n',yaxt='n',mar=c(0,6,.5,2),cex.lab=2)
+axis(1,at=c(1,5,20,100,250,500,1000,2500),labels=c(1,5,20,100,250,500,1000,2500),cex=2.5)
+axis(2,at=c(1,5,20,50,100,200),labels=c(1,5,20,50,100,200),cex=2.2)
+text(2,200,labels='b',cex=4)
+plot(Cellcounts,simpcell,log='xy',pch=19,xlab="",ylab="Simpson's 1/D",xaxt='n',yaxt='n',mar=c(5.5,6,.5,2),cex.lab=2)
+axis(2,at=c(0,1,5,10,50,100),labels=c(0,1,5,10,50,100),cex=2.2)
+text(2,90,labels='c',cex=4)
+plot(Cellcounts,fishercell,log='xy',pch=19,xlab="Data records per cell",ylab="Fisher's alpha",xaxt='n',yaxt='n',col="black",mar=c(5.5,6,.5,2),cex.lab=2)
+axis(2,at=c(0,1,5,10,50,100),labels=c(0,1,5,10,50,100),cex=2.2)
+axis(1,at=c(1,5,20,100,250,500,1000,2500),labels=c(1,5,20,100,250,500,1000,2500),cex=2.5)
+text(2,65,labels='d',cex=4)
 dev.off()
-png('Fig 03 Richness vs Environment.png', width=800, height=800)
-par(mar=c(5,4.2,0,2), mgp=c(3,0.75,0), cex=1.3, cex.lab=1.5,cex.axis=1.4, las=1,mfrow=c(2,1),oma=c(0,1,0.5,2))
-plot(sqrt(squarestep[,3]),squarestep[,1],pch=19,log ='xy',xaxt='n',yaxt='n',xlab='Precipitation', ylab='Richness')
+
+png('Fig 02 Lat lines.png', width=1000, height=1000)
+par( mgp=c(3,0.75,0), cex=1.3, cex.lab=2.5, cex.axis=1.8,las=1, mfcol=c(2,2), oma=c(0,2,0,0),mar=c(4.5,6.6,0.5,1))
+plot(squareslat[Cellcounts>99],Cellrichness[Cellcounts>99],pch=19,log='y',xlab="",xaxt='n',ylab="Richness",yaxt='n',xlim=c(-12,-39),mar=c(0,6,0,2),cex.lab=2)
+axis(2,at=c(50,100,150,200,250),labels=c(50,100,150,200,250),cex=2.2)
+text(-14,210,labels='a',cex=4)
+lines(c(0,-40),c(133.6779,52.5678),lwd=2)
+plot(squareslat[Cellcounts>99],chao1cell[Cellcounts>99],pch=19,log='y', xlab="Latitude",ylab="Richness",yaxt='n',col=,xlim=c(-12,-39),mar=c(5.5,6,0,2),cex.lab=2)
+axis(2,at=c(50,100,150,200,250,300),labels=c(25,40,50,100,200,300),cex=2.2)
+text(-14,275,labels='b',cex=4)
+lines(c(0,-40),c(242.349794,87.717354),lwd=2)
+plot(squareslat[Cellcounts>99],simpcell[Cellcounts>99],pch=19,log='y',xaxt='n',xlab="",ylab="",yaxt='n',xlim=c(-12,-39),mar=c(0,6,.5,2),cex.lab=2)
+axis(2,at=c(0,20,40,60,80,100),labels=c(0,20,40,60,80,100),cex=2.2)
+text(-14,100,labels='c',cex=4)
+lines(c(0,-40),c(111.197988,6.089548),lwd=2)
+plot(squareslat[Cellcounts>99],fishercell[Cellcounts>99],pch=19,log='y',xlab="Latitude",ylab="",yaxt='n',xlim=c(-12,-39),mar=c(5.5,6,0,2),cex.lab=2)
+axis(2,at=c(1,5,10,50,100),labels=c(1,5,10,50,100),cex=2.2)
+text(-14,80,labels='d',cex=4)
+lines(c(0,-40),c(113.099647,14.74673),lwd=2)
+dev.off()
+
+png('Fig 03 Richness vs Environment.png', width=600, height=900)
+par(mar=c(5,4.2,0,2), mgp=c(3,0.75,0), cex=1.3, cex.lab=1.5,cex.axis=1.4, las=1,mfrow=c(3,1),oma=c(0,1,0.5,2))
+plot(envfact[,6],envfact[,3],pch=19,log ='y',yaxt='n',xaxt= 'n',xlab='Precipitation', ylab="Simpson's 1/D")
 axis(1,at=c(sqrt(200),sqrt(500),sqrt(1000),sqrt(1500),sqrt(2000)), labels=c(200,500,1000,1500,2000))
-axis(2,at=c(log(10),log(20),log(50),log(100),log(500)),labels=c(10,20,50,100,500))
-text(sqrt(300),log(500),labels="a",cex=2)
-abline(coef=c(1.55850,0.07874),untf=T,lwd=2)
-plot(squarestep[,5],squarestep[,1],pch=19,log ='xy',xaxt='n',yaxt='n',xlab='Seasonality of Precipitation', ylab='Richness')
-axis(2,at=c(log(10),log(20),log(50),log(100),log(500)),labels=c(10,20,50,100,500))
+axis(2,at=c(log(1),log(5),log(10),log(50),log(100)),labels=c(1,5,10,50,100))
+text(sqrt(230),log(90),labels="a",cex=4)
+lines(c(1,sqrt(3500)),c(1.72227,4.17862632594),lwd=2)
+plot(envfact[,8],envfact[,3],pch=19,log ='y',xaxt='n',yaxt='n',xlab='Seasonality of Precipitation', ylab="Simpson's 1/D")
+axis(2,at=c(log(5),log(10),log(20),log(50),log(100)),labels=c(5,10,20,50,100))
 axis(1,at=c(15,30,45,60,75,90),labels=c(15,30,45,60,75,90))
-text(15,log(500),labels="b",cex=2)
-abline(coef=c(3.32202,0.01816),untf=T,lwd=2)
+text(15,log(90),labels="b",cex=4)
+lines(c(0,150),c(2.3146,5.1946),lwd=2)
+plot(envfact[,5],envfact[,3],pch=19,log ='y',xaxt='n',yaxt='n',xlab='Temperature', ylab="Simpson's 1/D")
+axis(2,at=c(log(5),log(10),log(20),log(50),log(100)),labels=c(5,10,20,50,100))
+axis(1,at=c(40,80,120,160,200,240),labels=c(4,8,12,16,20,24))
+text(65,log(90),labels="c",cex=4)
+lines(c(0,300),c(1.343502,4.304802),lwd=2)
+dev.off()
+
+png('Fig 04 Richness vs Environment.png', width=600, height=400)
+par(mar=c(5,4.2,0,2), mgp=c(3,0.75,0), cex=1.3, cex.lab=1.5,cex.axis=1.4, las=1,oma=c(0,1,0.5,2))
+plot(envfact[,6],envfact[,3],pch=19,log ='xy',xaxt='n',yaxt='n',xlab='Precipitation', ylab="Simpson's 1/D")
+axis(1,at=c(sqrt(200),sqrt(500),sqrt(1000),sqrt(1500),sqrt(2000)), labels=c(200,500,1000,1500,2000))
+axis(2,at=c(log(2),log(5),log(10),log(50),log(100)),labels=c(2,5,10,50,100))
+lines(c(1,sqrt(3500)),c(1.681399,4.255653),lwd=2)
+text(sqrt(300),log(80),labels="a",cex=2)
 dev.off()
