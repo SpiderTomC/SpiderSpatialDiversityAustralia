@@ -1,5 +1,4 @@
 EastSpiders = read.csv( #filepath of Spider Records East coast# , stringAsFactors=F)
-EastSpiders = read.csv( "c:\\Users\\Thoma\\Documents\\PhD Chapter one\\records-2019-06-20.csv", stringsAsFactors=F)  
 #latitudinal and longitudinal bounds
 min(EastSpiders$Latitude, na.rm=T)
 max(EastSpiders$Latitude, na.rm=T)
@@ -42,7 +41,7 @@ cellLats= seq(-12,-39,by=-0.25)
 cellLongs= seq(138, 159.5,by= 0.25)
 
 #creation of cell band arrays. Quarter degree cells balance accuracy with sample size. Chao1, 1/D and Fisher's alpha#
-#are run within the loop, giving observed richness and three estimates#
+#are run within the loop, giving observed richness and three estimates. also included within loop is the code to make an abundance matrix for all cells#
 
 Longrichness <- array()
 Longcounts <- array()
@@ -55,7 +54,6 @@ simpcell<-array()
 squareslat<-array()
 squareslong<-array()
 chaocell<-array()
-isrcell<- array()
 fishercell<-array()
 latcount=1
 longcount=1
@@ -105,15 +103,11 @@ chao1cell[chao1cell==0]<-NA
 chao1cells= matrix(chao1cell,nrow=length(cellLats),ncol=length(cellLongs))
 chao1cells=t(chao1cells)
 chao1cells<-chao1cells[,ncol(chao1cells)[1]:1]
-#simpsons d#
+#simpsons 1/d#
 simpmat= matrix(simpcell,nrow=length(cellLats),ncol=length(cellLongs))
 simpmat=simpmat[nrow(simpmat)[1]:1,]
 simpmat=t(simpmat)
-#isr rarefy#
-isrmat= matrix(isrcell,nrow=length(cellLats),ncol=length(cellLongs))
-isrmat=isrmat[nrow(isrmat)[1]:1,]
-isrmat=t(isrmat)
-#fisher#
+#fisher's alpha#
 fishercell[fishercell>500]<- NA
 fishermat= matrix(fishercell, nrow=length(cellLats),ncol=length(cellLongs))
 fishermat=fishermat[nrow(fishermat)[1]:1,]
@@ -194,30 +188,17 @@ ausdensity<- cellDensity[popcoords[,1]>=138.125 & popcoords[,1]<=159.625 & popco
 ausgrid=cbind(popgrid,ausdensity)
 ausgrid=ausgrid[order(ausgrid[,1],-ausgrid[,2]),]
 #Exploratory factor analysis and linear regression#
-restrictedabund=eastabund[,which(Cellcounts>49)]
-restrictedabund<-restrictedabund[2:2323,]
-restrictedabund <- restrictedabund[ order(row.names(restrictedabund)), ]
 envfact = cbind(log(Cellrichness), log(chao1cell),log(simpcell),log(fishercell),climvalues,altvalues,dryvalues,dryquartervalues,tempseasonvalues,squareslat, log(ausgrid[,3]), Cellcounts)
 envfact= envfact[which(envfact[,13]>49),]
 envfact[,6]<- sqrt(envfact[,6])
+rownames(envfact)<-c(1:222)
 envfact[envfact[,12]==-Inf]<-NA
 envfact= na.omit(envfact)
-rawregr= cbind(log(Cellrichness),climvalues,altvalues,dryvalues,dryquartervalues,tempseasonvalues,squareslat, log(ausgrid[,3]), Cellcounts)
-rawregr[rawregr[,9]==-Inf]<-NA
-rawregr=rawregr[which(rawregr[,10]>49),]
-rawregr=na.omit(rawregr)
-simpfact= cbind(log(simpcell),climvalues,altvalues,dryvalues,dryquartervalues,tempseasonvalues,squareslat,log(ausgrid[,3]),Cellcounts)
-simpfact= simpfact[which(simpfact[,10]>49),]
-simpfact[,3]<- sqrt(simpfact[,3])
-simpfact[simpfact[,9]==-Inf]<-NA
-simpfact= na.omit(simpfact)
+restrictedabund=eastabund[,which(Cellcounts>49)]
+restrictedabund<-restrictedabund[2:2323,]
+restrictedabund <- restrictedabund[ order(row.names(restrictedabund)), ]
+restrictedabund<-restrictedabund[,as.numeric(rownames(envfact))]
 
-
-library(psych)
-fa(scale(simpfact[,2:9]),nfactors=3, rotate= 'varimax', fm="wls")
-simpscores= fa(scale(simpfact[,2:9]),nfactors=3, rotate= 'varimax', fm="wls")$scores
-chaoscores= fa(scale(chaofact[,2:9]),nfactors=3, rotate= 'varimax', fm="wls")$scores
-envscores= fa(scale(envfact[,5:12]),nfactors=3, rotate= 'varimax', fm="minres")$scores
 envscores= factanal(scale(envfact[,5:12]),factors=3, scores = 'regression')$scores
 summary(lm(envfact[,1]~envscores[,1:3]))
 summary(lm(envfact[,2]~envscores[,1:3]))
